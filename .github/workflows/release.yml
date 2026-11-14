@@ -1,0 +1,67 @@
+name: Release Windows (.exe)
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+
+      - name: Setup Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: "src-tauri -> target"
+
+      - name: Install frontend dependencies
+        run: npm ci
+
+      - name: Run frontend checks
+        run: |
+          npm run typecheck
+          npm run test
+
+      - name: Run backend tests
+        working-directory: src-tauri
+        run: cargo test
+
+      - name: Build Tauri app & publish GitHub Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "Synapse Desktop v__VERSION__"
+          releaseBody: "Instalador Windows (.exe / .msi) e binário gerado automaticamente via GitHub Actions."
+          releaseDraft: false
+          prerelease: false
+
+      - name: Upload standalone portable .exe to Release
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
+          $exePath = "src-tauri/target/release/synapse-desktop.exe"
+          if (Test-Path $exePath) {
+            gh release upload $tag $exePath --clobber
+          }
