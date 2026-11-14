@@ -1,0 +1,22 @@
+# Build artifacts
+node_modules/
+dist/
+src-tauri/target/
+
+# Environment & Secrets
+.env
+.env.*
+!.env.example
+*.db
+*.db-shm
+*.db-wal
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+.agents
+arquivo.md
+skills-lock.json
+AGENTS.md
