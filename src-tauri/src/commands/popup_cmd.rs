@@ -78,7 +78,12 @@ async fn run_profile(
 
     state
         .execution_service
-        .finalize(&session, &profile.name, &text)
+        .finalize(
+            &session,
+            &profile.name,
+            &text,
+            config.selection_delivery_mode,
+        )
         .await?;
     Ok(text)
 }

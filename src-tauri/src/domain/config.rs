@@ -2,6 +2,36 @@ use serde::{Deserialize, Serialize};
 
 use crate::domain::errors::{SynapseError, SynapseResult};
 
+/// Define como o Synapse entrega o resultado após processar um texto selecionado.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum SelectionDeliveryMode {
+    #[default]
+    Clipboard,
+    PasteAndKeep,
+    PasteAndRestore,
+}
+
+impl SelectionDeliveryMode {
+    #[must_use]
+    pub const fn as_str(self) -> &'static str {
+        match self {
+            Self::Clipboard => "clipboard",
+            Self::PasteAndKeep => "paste_and_keep",
+            Self::PasteAndRestore => "paste_and_restore",
+        }
+    }
+
+    #[must_use]
+    pub fn from_db(raw: &str) -> Self {
+        match raw {
+            "paste_and_keep" => Self::PasteAndKeep,
+            "paste_and_restore" => Self::PasteAndRestore,
+            _ => Self::Clipboard,
+        }
+    }
+}
+
 /// Configurações persistidas da aplicação (sem dados secretos).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct AppConfig {
@@ -14,6 +44,8 @@ pub struct AppConfig {
     pub model: String,
     pub timeout_secs: u64,
     pub retention_days: u32,
+    #[serde(default)]
+    pub selection_delivery_mode: SelectionDeliveryMode,
 }
 
 fn default_compose_shortcut() -> String {
@@ -31,6 +63,7 @@ impl Default for AppConfig {
             model: "deepseek-chat".to_string(),
             timeout_secs: 10,
             retention_days: 30,
+            selection_delivery_mode: SelectionDeliveryMode::Clipboard,
         }
     }
 }
@@ -64,6 +97,7 @@ pub struct AppConfigView {
     pub model: String,
     pub timeout_secs: u64,
     pub retention_days: u32,
+    pub selection_delivery_mode: SelectionDeliveryMode,
     pub has_api_key: bool,
 }
 
@@ -79,6 +113,7 @@ impl AppConfigView {
             model: config.model,
             timeout_secs: config.timeout_secs,
             retention_days: config.retention_days,
+            selection_delivery_mode: config.selection_delivery_mode,
             has_api_key,
         }
     }

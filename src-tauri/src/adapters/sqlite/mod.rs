@@ -18,13 +18,15 @@ mod tests {
         let repo = SqliteProfileRepo::new(db);
 
         let seeded = repo.seed_defaults_if_empty().unwrap();
-        assert_eq!(seeded, 3);
+        assert_eq!(seeded, 4);
 
         let profiles = repo.list_all().unwrap();
-        assert_eq!(profiles.len(), 3);
-        assert_eq!(profiles[0].name, "Correção Silenciosa");
-        assert_eq!(profiles[1].name, "Reescrita Profissional");
-        assert_eq!(profiles[2].name, "Tradução EN-PT");
+        assert_eq!(profiles.len(), 4);
+        let names: Vec<&str> = profiles.iter().map(|p| p.name.as_str()).collect();
+        assert!(names.contains(&"Correção Silenciosa"));
+        assert!(names.contains(&"Reescrita Profissional e Executiva"));
+        assert!(names.contains(&"Resumo Técnico e Arquitetura"));
+        assert!(names.contains(&"Tradução EN-PT"));
     }
 
     #[test]
@@ -32,9 +34,9 @@ mod tests {
         let db = SqliteDatabase::open_in_memory().unwrap();
         let repo = SqliteProfileRepo::new(db);
 
-        assert_eq!(repo.seed_defaults_if_empty().unwrap(), 3);
+        assert_eq!(repo.seed_defaults_if_empty().unwrap(), 4);
         assert_eq!(repo.seed_defaults_if_empty().unwrap(), 0);
-        assert_eq!(repo.list_all().unwrap().len(), 3);
+        assert_eq!(repo.list_all().unwrap().len(), 4);
     }
 
     #[test]
@@ -54,7 +56,7 @@ mod tests {
         .unwrap();
 
         repo.save(&custom).unwrap();
-        assert_eq!(repo.list_all().unwrap().len(), 4);
+        assert_eq!(repo.list_all().unwrap().len(), 5);
 
         let mut updated = repo.get_by_id("custom-resumo").unwrap().unwrap();
         updated.temperature = 0.8;
@@ -65,7 +67,7 @@ mod tests {
 
         repo.delete("custom-resumo").unwrap();
         assert!(repo.get_by_id("custom-resumo").unwrap().is_none());
-        assert_eq!(repo.list_all().unwrap().len(), 3);
+        assert_eq!(repo.list_all().unwrap().len(), 4);
     }
 
     #[test]

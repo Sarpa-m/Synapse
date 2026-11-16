@@ -55,16 +55,19 @@ impl SqliteDatabase {
         conn.execute_batch(INITIAL_SCHEMA_SQL)
             .map_err(|e| SynapseError::DatabaseError(format!("falha na migração SQLite: {e}")))?;
 
-        let has_compose_col: bool = conn
-            .prepare("PRAGMA table_info(app_config)")
+        let mut has_compose_col = false;
+        let mut has_delivery_col = false;
+        conn.prepare("PRAGMA table_info(app_config)")
             .and_then(|mut stmt| {
                 let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
                 for col in rows {
-                    if col? == "compose_shortcut" {
-                        return Ok(true);
+                    match col?.as_str() {
+                        "compose_shortcut" => has_compose_col = true,
+                        "selection_delivery_mode" => has_delivery_col = true,
+                        _ => {}
                     }
                 }
-                Ok(false)
+                Ok(())
             })
             .map_err(|e| {
                 SynapseError::DatabaseError(format!("falha ao inspecionar app_config: {e}"))
@@ -76,6 +79,17 @@ impl SqliteDatabase {
                 [],
             )
             .map_err(|e| SynapseError::DatabaseError(format!("falha ao adicionar compose_shortcut: {e}")))?;
+        }
+        if !has_delivery_col {
+            conn.execute(
+                "ALTER TABLE app_config ADD COLUMN selection_delivery_mode TEXT NOT NULL DEFAULT 'clipboard'",
+                [],
+            )
+            .map_err(|e| {
+                SynapseError::DatabaseError(format!(
+                    "falha ao adicionar selection_delivery_mode: {e}"
+                ))
+            })?;
         }
         Ok(())
     }

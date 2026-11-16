@@ -2,7 +2,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use crate::domain::{
-    config::AppConfig,
+    config::{AppConfig, SelectionDeliveryMode},
     errors::{SynapseError, SynapseResult},
     history::sanitize_llm_output,
     profile::Profile,
@@ -56,7 +56,8 @@ impl ExecutionService {
         self
     }
 
-    /// Executa um perfil predefinido sobre a `CaptureSession` ativa e injeta o resultado na janela de origem.
+    /// Executa um perfil predefinido sobre a `CaptureSession` ativa e entrega o resultado
+    /// conforme `config.selection_delivery_mode`.
     pub async fn execute_with_profile(
         &self,
         session: &CaptureSession,
@@ -64,19 +65,36 @@ impl ExecutionService {
         config: &AppConfig,
     ) -> SynapseResult<String> {
         let final_text = self.generate(session, profile, config).await?;
-        self.finalize(session, &profile.name, &final_text).await?;
+        self.finalize(
+            session,
+            &profile.name,
+            &final_text,
+            config.selection_delivery_mode,
+        )
+        .await?;
         Ok(final_text)
     }
 
-    /// Etapa 2 (após a UI fechar o popup): injeta o texto na janela original,
-    /// restaura o backup do clipboard e grava o histórico.
+    /// Etapa 2 (após a UI fechar o popup): entrega o texto conforme o modo configurado
+    /// (`clipboard`, `paste_and_keep` ou `paste_and_restore`) e grava o histórico.
     pub async fn finalize(
         &self,
         session: &CaptureSession,
         profile_name: &str,
         final_text: &str,
+        delivery_mode: SelectionDeliveryMode,
     ) -> SynapseResult<()> {
-        self.inject_and_restore(session, final_text).await?;
+        match delivery_mode {
+            SelectionDeliveryMode::Clipboard => {
+                self.clipboard.set_text(final_text)?;
+            }
+            SelectionDeliveryMode::PasteAndKeep => {
+                self.inject_with_options(session, final_text, false).await?;
+            }
+            SelectionDeliveryMode::PasteAndRestore => {
+                self.inject_with_options(session, final_text, true).await?;
+            }
+        }
         self.history_repo
             .record(profile_name, &session.selected_text, final_text)?;
         Ok(())
@@ -199,11 +217,22 @@ impl ExecutionService {
     }
 
     /// Fluxo de Injeção Segura:
-    /// Restaura foco (`HWND`) -> Escreve resposta no clipboard -> Simula `Ctrl+V` -> Restaura backup original.
+    /// Restaura foco (`HWND`) -> Escreve resposta no clipboard -> Simula `Ctrl+V` ->
+    /// Opcionalmente restaura backup original.
     pub async fn inject_and_restore(
         &self,
         session: &CaptureSession,
         text_to_inject: &str,
+    ) -> SynapseResult<()> {
+        self.inject_with_options(session, text_to_inject, true)
+            .await
+    }
+
+    async fn inject_with_options(
+        &self,
+        session: &CaptureSession,
+        text_to_inject: &str,
+        restore_backup: bool,
     ) -> SynapseResult<()> {
         self.window_focus.restore_focus(session.source_hwnd)?;
         if !self.focus_settle_delay.is_zero() {
@@ -215,6 +244,10 @@ impl ExecutionService {
 
         if !self.paste_settle_delay.is_zero() {
             tokio::time::sleep(self.paste_settle_delay).await;
+        }
+
+        if !restore_backup {
+            return paste_result;
         }
 
         // Restaura SEMPRE o clipboard original do usuário, mesmo que o paste tenha retornado erro
@@ -336,7 +369,10 @@ mod tests {
             backup_clipboard: Some("meu_clipboard_antigo".to_string()),
         };
         let profile = &Profile::default_seeds()[0];
-        let config = AppConfig::default();
+        let config = AppConfig {
+            selection_delivery_mode: SelectionDeliveryMode::PasteAndRestore,
+            ..AppConfig::default()
+        };
 
         let result = service
             .execute_with_profile(&session, profile, &config)
@@ -384,7 +420,10 @@ mod tests {
             backup_clipboard: Some("backup".to_string()),
         };
         let profile = &Profile::default_seeds()[0];
-        let config = AppConfig::default();
+        let config = AppConfig {
+            selection_delivery_mode: SelectionDeliveryMode::PasteAndRestore,
+            ..AppConfig::default()
+        };
 
         let err = service
             .execute_with_profile(&session, profile, &config)
@@ -448,7 +487,10 @@ mod tests {
         .with_delays(Duration::ZERO, Duration::ZERO);
 
         let profile = &Profile::default_seeds()[0];
-        let config = AppConfig::default();
+        let config = AppConfig {
+            selection_delivery_mode: SelectionDeliveryMode::PasteAndRestore,
+            ..AppConfig::default()
+        };
 
         let result = service
             .execute_to_clipboard("meu rascunho", profile, &config)
@@ -472,5 +514,154 @@ mod tests {
         // Garante que tags internas foram escapadas para impedir fuga do delimitador
         assert!(!user[20..user.len() - 21].contains("</synapse_user_text>"));
         assert!(user.contains("&lt;/synapse_user_text&gt;"));
+    }
+
+    #[tokio::test]
+    async fn test_execution_clipboard_mode_default() {
+        let mut llm = MockLlmProviderPort::new();
+        let mut clip = MockClipboardPort::new();
+        let mut kbd = MockKeyboardSimulatorPort::new();
+        let mut focus = MockWindowFocusPort::new();
+        let mut history = MockHistoryRepoPort::new();
+        let mut secrets = MockSecretStorePort::new();
+
+        secrets
+            .expect_get_api_key()
+            .returning(|| Ok(Some("sk-valid-key".to_string())));
+
+        llm.expect_complete()
+            .times(1)
+            .returning(|_| Box::pin(async { Ok("Texto corrigido.".to_string()) }));
+
+        focus.expect_restore_focus().times(0);
+        kbd.expect_simulate_paste().times(0);
+
+        clip.expect_set_text()
+            .withf(|text| text == "Texto corrigido.")
+            .times(1)
+            .returning(|_| Ok(()));
+
+        history
+            .expect_record()
+            .times(1)
+            .returning(|profile_name, orig, gen_text| {
+                Ok(HistoryEntry {
+                    id: 1,
+                    profile_name: profile_name.to_string(),
+                    original_text: orig.to_string(),
+                    generated_text: gen_text.to_string(),
+                    created_at: "2026-11-14 12:00:00".to_string(),
+                })
+            });
+
+        let service = ExecutionService::new(
+            Arc::new(llm),
+            Arc::new(clip),
+            Arc::new(kbd),
+            Arc::new(focus),
+            Arc::new(history),
+            Arc::new(secrets),
+        )
+        .with_delays(Duration::ZERO, Duration::ZERO);
+
+        let session = CaptureSession {
+            selected_text: "texto com erro".to_string(),
+            source_hwnd: 777,
+            backup_clipboard: Some("meu_clipboard_antigo".to_string()),
+        };
+        let profile = &Profile::default_seeds()[0];
+        let config = AppConfig::default();
+        assert_eq!(
+            config.selection_delivery_mode,
+            SelectionDeliveryMode::Clipboard
+        );
+
+        let result = service
+            .execute_with_profile(&session, profile, &config)
+            .await
+            .unwrap();
+        assert_eq!(result, "Texto corrigido.");
+    }
+
+    #[tokio::test]
+    async fn test_execution_paste_and_keep_mode() {
+        let mut seq = Sequence::new();
+
+        let mut llm = MockLlmProviderPort::new();
+        let mut clip = MockClipboardPort::new();
+        let mut kbd = MockKeyboardSimulatorPort::new();
+        let mut focus = MockWindowFocusPort::new();
+        let mut history = MockHistoryRepoPort::new();
+        let mut secrets = MockSecretStorePort::new();
+
+        secrets
+            .expect_get_api_key()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|| Ok(Some("sk-valid-key".to_string())));
+
+        llm.expect_complete()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|_| Box::pin(async { Ok("Texto corrigido.".to_string()) }));
+
+        focus
+            .expect_restore_focus()
+            .withf(|hwnd| *hwnd == 777)
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|_| Ok(()));
+
+        clip.expect_set_text()
+            .withf(|text| text == "Texto corrigido.")
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|_| Ok(()));
+
+        kbd.expect_simulate_paste()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|| Ok(()));
+
+        history
+            .expect_record()
+            .times(1)
+            .in_sequence(&mut seq)
+            .returning(|profile_name, orig, gen_text| {
+                Ok(HistoryEntry {
+                    id: 1,
+                    profile_name: profile_name.to_string(),
+                    original_text: orig.to_string(),
+                    generated_text: gen_text.to_string(),
+                    created_at: "2026-11-14 12:00:00".to_string(),
+                })
+            });
+
+        let service = ExecutionService::new(
+            Arc::new(llm),
+            Arc::new(clip),
+            Arc::new(kbd),
+            Arc::new(focus),
+            Arc::new(history),
+            Arc::new(secrets),
+        )
+        .with_delays(Duration::ZERO, Duration::ZERO);
+
+        let session = CaptureSession {
+            selected_text: "texto com erro".to_string(),
+            source_hwnd: 777,
+            backup_clipboard: Some("meu_clipboard_antigo".to_string()),
+        };
+        let profile = &Profile::default_seeds()[0];
+        let config = AppConfig {
+            selection_delivery_mode: SelectionDeliveryMode::PasteAndKeep,
+            ..AppConfig::default()
+        };
+
+        let result = service
+            .execute_with_profile(&session, profile, &config)
+            .await
+            .unwrap();
+        assert_eq!(result, "Texto corrigido.");
     }
 }

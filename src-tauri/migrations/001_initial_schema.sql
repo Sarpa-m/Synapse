@@ -20,6 +20,7 @@ CREATE TABLE IF NOT EXISTS app_config (
     model TEXT NOT NULL,
     timeout_secs INTEGER NOT NULL DEFAULT 10,
     retention_days INTEGER NOT NULL DEFAULT 30,
+    selection_delivery_mode TEXT NOT NULL DEFAULT 'clipboard',
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

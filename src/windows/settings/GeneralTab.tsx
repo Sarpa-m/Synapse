@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import type { AppConfig } from "../../types/domain";
+import type { AppConfig, SelectionDeliveryMode } from "../../types/domain";
 import { ShortcutRecorder } from "./ShortcutRecorder";
 
 interface GeneralTabProps {
@@ -67,6 +67,33 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
         value={config.undo_shortcut}
         onChange={(undo_shortcut) => onChange({ ...config, undo_shortcut })}
       />
+
+      <div>
+        <label className="block text-xs font-medium text-slate-300 mb-1">
+          Ao processar texto selecionado
+        </label>
+        <select
+          aria-label="Ao processar texto selecionado"
+          value={config.selection_delivery_mode}
+          onChange={(e) =>
+            onChange({
+              ...config,
+              selection_delivery_mode: e.target.value as SelectionDeliveryMode,
+            })
+          }
+          className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-white"
+        >
+          <option value="clipboard">
+            Salvar nova versão na área de transferência (Ctrl+V)
+          </option>
+          <option value="paste_and_keep">
+            Colar automaticamente e manter nova versão no Ctrl+V
+          </option>
+          <option value="paste_and_restore">
+            Colar automaticamente e restaurar clipboard antigo
+          </option>
+        </select>
+      </div>
 
       <div>
         <label className="block text-xs font-medium text-slate-300 mb-1">

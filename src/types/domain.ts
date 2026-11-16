@@ -15,6 +15,11 @@ export interface HistoryEntry {
   created_at: string;
 }
 
+export type SelectionDeliveryMode =
+  | "clipboard"
+  | "paste_and_keep"
+  | "paste_and_restore";
+
 export interface AppConfig {
   global_shortcut: string;
   compose_shortcut: string;
@@ -24,6 +29,7 @@ export interface AppConfig {
   model: string;
   timeout_secs: number;
   retention_days: number;
+  selection_delivery_mode: SelectionDeliveryMode;
 }
 
 export interface AppConfigView extends AppConfig {
