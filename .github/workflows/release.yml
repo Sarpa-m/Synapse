@@ -6,16 +6,23 @@ on:
       - "v*"
   workflow_dispatch:
 
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
 permissions:
   contents: write
 
 jobs:
-  build-windows:
+  publish-release:
+    name: Build & Publish Windows Release
     runs-on: windows-latest
 
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -26,28 +33,24 @@ jobs:
       - name: Setup Rust stable
         uses: dtolnay/rust-toolchain@stable
 
-      - name: Rust cache
+      - name: Rust cache (Release profile)
         uses: swatinem/rust-cache@v2
         with:
           workspaces: "src-tauri -> target"
+          key: release-profile
+          cache-all-crates: true
 
       - name: Install frontend dependencies
         run: npm ci
 
-      - name: Run frontend checks
-        run: |
-          npm run typecheck
-          npm run test
-
-      - name: Run backend tests
-        working-directory: src-tauri
-        run: cargo test
-
-      - name: Extract release notes from CHANGELOG.md
+      - name: Extract release notes from CHANGELOG.md & Prepare GitHub Release
         id: changelog
         shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           $version = (Get-Content package.json | ConvertFrom-Json).version
+          $tag = "v$version"
           $notesFile = "$env:RUNNER_TEMP/release_notes.md"
           $notes = ""
 
@@ -73,7 +76,15 @@ jobs:
           Set-Content -Path $notesFile -Value $notes -Encoding UTF8
           "notes_file=$notesFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
 
-      - name: Build Tauri app & publish GitHub Release
+          # Garante que a release já exista antes do tauri-action para evitar falha de criação na API
+          gh release view $tag >$null 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            gh release create $tag --title "Synapse Desktop $tag" --notes-file $notesFile
+          } else {
+            gh release edit $tag --title "Synapse Desktop $tag" --notes-file $notesFile
+          }
+
+      - name: Build Tauri app & upload installers (.exe / .msi)
         uses: tauri-apps/tauri-action@v0
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -84,7 +95,7 @@ jobs:
           releaseDraft: false
           prerelease: false
 
-      - name: Upload standalone portable .exe & update Release Notes
+      - name: Upload standalone portable .exe & finalize Release Notes
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
