@@ -43,6 +43,36 @@ jobs:
         working-directory: src-tauri
         run: cargo test
 
+      - name: Extract release notes from CHANGELOG.md
+        id: changelog
+        shell: pwsh
+        run: |
+          $version = (Get-Content package.json | ConvertFrom-Json).version
+          $notesFile = "$env:RUNNER_TEMP/release_notes.md"
+          $notes = ""
+
+          if (Test-Path "CHANGELOG.md") {
+            $raw = Get-Content "CHANGELOG.md" -Raw -Encoding UTF8
+            $pattern = "(?ms)^## \[$([regex]::Escape($version))\][^\r\n]*\r?\n(.*?)(?=^## \[|\z)"
+            $match = [regex]::Match($raw, $pattern)
+            if ($match.Success) {
+              $notes = $match.Groups[1].Value.Trim()
+            }
+          }
+
+          if ([string]::IsNullOrWhiteSpace($notes)) {
+            $prevTag = git describe --tags --abbrev=0 "HEAD^" 2>$null
+            if ($LASTEXITCODE -eq 0 -and $prevTag) {
+              $commits = git log "$prevTag..HEAD" --pretty=format:"- %s (%h)"
+            } else {
+              $commits = git log -n 15 --pretty=format:"- %s (%h)"
+            }
+            $notes = "### Alterações nesta versão`n`n" + ($commits -join "`n")
+          }
+
+          Set-Content -Path $notesFile -Value $notes -Encoding UTF8
+          "notes_file=$notesFile" | Out-File -FilePath $env:GITHUB_OUTPUT -Append
+
       - name: Build Tauri app & publish GitHub Release
         uses: tauri-apps/tauri-action@v0
         env:
@@ -50,11 +80,11 @@ jobs:
         with:
           tagName: v__VERSION__
           releaseName: "Synapse Desktop v__VERSION__"
-          releaseBody: "Instalador Windows (.exe / .msi) e binário gerado automaticamente via GitHub Actions."
+          releaseBody: "Consulte abaixo as alterações e correções desta versão."
           releaseDraft: false
           prerelease: false
 
-      - name: Upload standalone portable .exe to Release
+      - name: Upload standalone portable .exe & update Release Notes
         shell: pwsh
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -64,4 +94,7 @@ jobs:
           $exePath = "src-tauri/target/release/synapse-desktop.exe"
           if (Test-Path $exePath) {
             gh release upload $tag $exePath --clobber
+          }
+          if (Test-Path "${{ steps.changelog.outputs.notes_file }}") {
+            gh release edit $tag --notes-file "${{ steps.changelog.outputs.notes_file }}"
           }
