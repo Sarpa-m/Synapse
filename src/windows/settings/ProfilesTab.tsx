@@ -1,11 +1,20 @@
 import React, { useState } from "react";
+import { Pencil, RotateCcw, Trash2 } from "lucide-react";
 import type { Profile } from "../../types/domain";
+import { KbdBadge } from "../../components/ui/KbdBadge";
+import { StatusBanner } from "../../components/ui/StatusBanner";
 
 interface ProfilesTabProps {
   profiles: Profile[];
   onSaveProfile: (profile: Profile) => Promise<void>;
   onDeleteProfile: (id: string) => Promise<void>;
   onRestoreDefaults?: () => Promise<void>;
+}
+
+function describeTemperature(temp: number): string {
+  if (temp <= 0.3) return "Preciso";
+  if (temp <= 0.9) return "Equilibrado";
+  return "Criativo";
 }
 
 export const ProfilesTab: React.FC<ProfilesTabProps> = ({
@@ -74,17 +83,19 @@ export const ProfilesTab: React.FC<ProfilesTabProps> = ({
     <div className="space-y-6">
       <form
         onSubmit={handleSubmit}
-        className="space-y-3 p-4 rounded-lg bg-slate-800/50 border border-slate-700"
+        className="space-y-4 p-5 rounded-xl bg-[#12151B] border border-white/[0.08]"
       >
         <div className="flex items-center justify-between">
           <h3 className="text-sm font-semibold text-white">
-            {editingProfile ? `Editar Perfil: ${editingProfile.name}` : "Novo Perfil de IA"}
+            {editingProfile
+              ? `Editar Perfil: ${editingProfile.name}`
+              : "Novo Perfil de IA"}
           </h3>
           {editingProfile && (
             <button
               type="button"
               onClick={resetForm}
-              className="text-xs text-slate-400 hover:text-slate-200"
+              className="text-xs text-zinc-400 hover:text-zinc-200 synapse-interactive"
             >
               Cancelar edição
             </button>
@@ -92,62 +103,91 @@ export const ProfilesTab: React.FC<ProfilesTabProps> = ({
         </div>
 
         {validationError && (
-          <div role="alert" className="text-xs text-red-400">
-            {validationError}
-          </div>
+          <StatusBanner type="error" message={validationError} />
         )}
 
-        <div className="grid grid-cols-4 gap-3">
-          <div className="col-span-2">
-            <label className="block text-xs text-slate-300 mb-1">Nome do Perfil</label>
+        <div className="grid grid-cols-12 gap-3">
+          <div className="col-span-6">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+              Nome do Perfil
+            </label>
             <input
               type="text"
               aria-label="Nome do Perfil"
+              placeholder="Ex: Resumo Executivo"
               value={name}
               onChange={(e) => setName(e.target.value)}
-              className="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-sm text-white"
+              className="w-full px-3 py-2 rounded-lg bg-[#0B0D10] border border-white/10 text-sm text-white placeholder-zinc-500 synapse-interactive focus:outline-none focus:border-sky-400/60"
             />
           </div>
-          <div>
-            <label className="block text-xs text-slate-300 mb-1">Temperatura (0.0 a 2.0)</label>
-            <input
-              type="number"
-              step="0.1"
-              aria-label="Temperatura"
-              value={temperature}
-              onChange={(e) => setTemperature(Number(e.target.value))}
-              className="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-sm text-white"
-            />
+
+          <div className="col-span-4">
+            <div className="flex items-center justify-between mb-1.5">
+              <label className="text-xs font-medium text-zinc-300">
+                Temperatura
+              </label>
+              <span className="text-[11px] text-sky-300 font-medium">
+                {describeTemperature(temperature)}
+              </span>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="range"
+                min={0}
+                max={2}
+                step={0.1}
+                aria-label="Controle deslizante de temperatura"
+                value={Number.isNaN(temperature) ? 0 : Math.min(2, Math.max(0, temperature))}
+                onChange={(e) => setTemperature(Number(e.target.value))}
+                className="flex-1 accent-sky-400 cursor-pointer"
+              />
+              <input
+                type="number"
+                step="0.1"
+                aria-label="Temperatura"
+                value={temperature}
+                onChange={(e) => setTemperature(Number(e.target.value))}
+                className="w-16 px-2 py-1.5 rounded-lg bg-[#0B0D10] border border-white/10 text-xs font-mono text-white text-center focus:outline-none focus:border-sky-400/60"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-xs text-slate-300 mb-1">Atalho (1-9)</label>
+
+          <div className="col-span-2">
+            <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+              Atalho (1-9)
+            </label>
             <input
               type="text"
               maxLength={1}
               aria-label="Atalho Rápido"
-              placeholder="Ex: 4"
+              placeholder="1-9"
               value={shortcut}
-              onChange={(e) => setShortcut(e.target.value.replace(/[^1-9]/g, ""))}
-              className="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-sm text-white"
+              onChange={(e) =>
+                setShortcut(e.target.value.replace(/[^1-9]/g, ""))
+              }
+              className="w-full px-3 py-2 rounded-lg bg-[#0B0D10] border border-white/10 text-sm font-mono text-white text-center placeholder-zinc-500 synapse-interactive focus:outline-none focus:border-sky-400/60"
             />
           </div>
         </div>
 
         <div>
-          <label className="block text-xs text-slate-300 mb-1">System Prompt</label>
+          <label className="block text-xs font-medium text-zinc-300 mb-1.5">
+            System Prompt
+          </label>
           <textarea
             rows={3}
             aria-label="System Prompt"
+            placeholder="Descreva exatamente como a IA deve transformar o texto..."
             value={systemPrompt}
             onChange={(e) => setSystemPrompt(e.target.value)}
-            className="w-full px-3 py-1.5 rounded bg-slate-900 border border-slate-700 text-sm text-white"
+            className="w-full px-3 py-2 rounded-lg bg-[#0B0D10] border border-white/10 text-sm text-white placeholder-zinc-500 synapse-interactive focus:outline-none focus:border-sky-400/60"
           />
         </div>
 
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 pt-1">
           <button
             type="submit"
-            className="px-4 py-1.5 rounded bg-indigo-600 hover:bg-indigo-500 text-xs font-medium text-white"
+            className="px-4 py-2 rounded-lg bg-sky-500 hover:bg-sky-400 text-xs font-semibold text-slate-950 synapse-pressable"
           >
             {editingProfile ? "Salvar Alterações" : "Adicionar Perfil"}
           </button>
@@ -155,7 +195,7 @@ export const ProfilesTab: React.FC<ProfilesTabProps> = ({
             <button
               type="button"
               onClick={resetForm}
-              className="px-4 py-1.5 rounded bg-slate-700 hover:bg-slate-600 text-xs font-medium text-slate-200"
+              className="px-4 py-2 rounded-lg bg-white/[0.06] hover:bg-white/[0.1] text-xs font-medium text-zinc-200 synapse-pressable"
             >
               Cancelar
             </button>
@@ -163,68 +203,67 @@ export const ProfilesTab: React.FC<ProfilesTabProps> = ({
         </div>
       </form>
 
-      <div className="space-y-2">
+      <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h4 className="text-xs font-semibold uppercase tracking-wider text-slate-400">
-            Perfis Cadastrados ({profiles.length})
+          <h4 className="text-xs font-medium text-zinc-400">
+            Perfis cadastrados ({profiles.length})
           </h4>
           {onRestoreDefaults && (
             <button
               type="button"
               onClick={onRestoreDefaults}
-              className="text-xs text-slate-400 hover:text-indigo-300"
+              className="inline-flex items-center gap-1.5 text-xs text-zinc-400 hover:text-sky-300 synapse-interactive"
             >
+              <RotateCcw className="w-3.5 h-3.5" />
               Restaurar Perfis Padrão
             </button>
           )}
         </div>
 
-        {profiles.map((p) => (
-          <div
-            key={p.id}
-            className={`flex items-center justify-between p-3 rounded border ${
-              editingProfile?.id === p.id
-                ? "bg-indigo-950/40 border-indigo-500/70"
-                : "bg-slate-800/60 border-slate-700/70"
-            }`}
-          >
-            <div className="min-w-0 pr-3">
-              <div className="text-sm font-medium text-white flex items-center gap-2">
-                <span className="truncate">{p.name}</span>
-                <span className="text-xs text-slate-400">
-                  (temp: {p.temperature.toFixed(1)})
-                </span>
-                {p.shortcut && (
-                  <kbd className="px-1.5 py-0.5 text-[10px] rounded bg-slate-900 border border-slate-700 text-slate-300">
-                    {p.shortcut}
-                  </kbd>
-                )}
+        <div className="space-y-2">
+          {profiles.map((profile) => (
+            <div
+              key={profile.id}
+              className="synapse-card-hover flex items-start justify-between gap-4 p-3.5 rounded-xl bg-[#12151B] border border-white/[0.08]"
+            >
+              <div className="min-w-0 space-y-1">
+                <div className="flex items-center gap-2">
+                  {profile.shortcut && (
+                    <KbdBadge keys={profile.shortcut} size="xs" active />
+                  )}
+                  <span className="text-sm font-medium text-white truncate">
+                    {profile.name}
+                  </span>
+                  <span className="text-[11px] font-mono text-zinc-400 px-1.5 py-0.5 rounded bg-white/[0.04]">
+                    {profile.temperature.toFixed(1)}
+                  </span>
+                </div>
+                <p className="text-xs text-zinc-400 line-clamp-2 leading-relaxed">
+                  {profile.system_prompt}
+                </p>
               </div>
-              <p className="text-xs text-slate-400 line-clamp-1">{p.system_prompt}</p>
-            </div>
-            <div className="flex items-center gap-3 shrink-0">
-              <button
-                type="button"
-                onClick={() => startEditing(p)}
-                className="text-xs text-indigo-400 hover:text-indigo-300"
-              >
-                Editar
-              </button>
-              {!p.is_default && (
+
+              <div className="flex items-center gap-1.5 shrink-0">
                 <button
                   type="button"
-                  onClick={() => {
-                    if (editingProfile?.id === p.id) resetForm();
-                    void onDeleteProfile(p.id);
-                  }}
-                  className="text-xs text-red-400 hover:text-red-300"
+                  onClick={() => startEditing(profile)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-white/[0.05] hover:bg-white/[0.1] text-xs text-zinc-200 synapse-pressable"
                 >
+                  <Pencil className="w-3 h-3" />
+                  Editar
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onDeleteProfile(profile.id)}
+                  className="inline-flex items-center gap-1 px-2.5 py-1.5 rounded-lg bg-rose-950/50 hover:bg-rose-900/60 border border-rose-500/25 text-xs text-rose-200 synapse-pressable"
+                >
+                  <Trash2 className="w-3 h-3" />
                   Excluir
                 </button>
-              )}
+              </div>
             </div>
-          </div>
-        ))}
+          ))}
+        </div>
       </div>
     </div>
   );

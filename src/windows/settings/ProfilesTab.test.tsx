@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from "@testing-library/react";
+import { render, screen, fireEvent, waitFor } from "@testing-library/react";
 import { describe, it, expect, vi } from "vitest";
 import { ProfilesTab } from "./ProfilesTab";
 
@@ -73,13 +73,15 @@ describe("ProfilesTab — Validação de Formulário", () => {
     });
     fireEvent.click(screen.getByRole("button", { name: "Salvar Alterações" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      id: "default-correcao",
-      name: "Correção Rápida",
-      system_prompt: "Corrija o texto",
-      temperature: 0.1,
-      shortcut: "1",
-      is_default: true,
+    await waitFor(() => {
+      expect(onSave).toHaveBeenCalledWith({
+        id: "default-correcao",
+        name: "Correção Rápida",
+        system_prompt: "Corrija o texto",
+        temperature: 0.1,
+        shortcut: "1",
+        is_default: true,
+      });
     });
   });
 });

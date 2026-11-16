@@ -1,9 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
-import { AlertCircle, ClipboardCheck } from "lucide-react";
+import { ClipboardCheck, Loader2 } from "lucide-react";
 import type { PopupSessionView, Profile } from "../../types/domain";
 import { tauriClient } from "../../services/tauriClient";
 import { PromptInput } from "./PromptInput";
 import { ProfileList } from "./ProfileList";
+import { StatusBanner } from "../../components/ui/StatusBanner";
+import { KbdBadge } from "../../components/ui/KbdBadge";
 
 function extractErrorMessage(err: unknown): string {
   if (err instanceof Error) return err.message;
@@ -225,17 +227,26 @@ export const PopupWindow: React.FC = () => {
     <div
       onKeyDown={handleKeyDown}
       tabIndex={-1}
-      className="w-full max-w-xl mx-auto rounded-xl border border-slate-700/80 bg-slate-900/95 shadow-2xl overflow-hidden text-slate-100"
+      className="w-full max-w-xl mx-auto rounded-xl border border-white/10 bg-[#12151B]/[0.97] shadow-[0_24px_64px_rgba(0,0,0,0.72)] overflow-hidden text-zinc-100 focus:outline-none"
     >
       {isComposeMode ? (
-        <div className="p-3 border-b border-slate-800 space-y-2">
-          <div className="flex items-center justify-between text-[11px] text-indigo-300">
-            <span className="flex items-center gap-1.5 font-medium">
+        <div className="relative p-3.5 border-b border-white/[0.08] space-y-2.5 bg-[#12151B]">
+          <div className="flex items-center justify-between text-xs">
+            <span className="inline-flex items-center gap-1.5 font-medium text-sky-300">
               <ClipboardCheck className="w-3.5 h-3.5" />
-              Modo Composição — resultado será copiado para seu Ctrl+V
+              Modo Composição — resultado copiado para seu Ctrl+V
             </span>
-            {isLoading && <span className="text-slate-400">Processando...</span>}
+            <div className="flex items-center gap-2">
+              {isLoading && (
+                <span className="inline-flex items-center gap-1 text-[11px] text-sky-300">
+                  <Loader2 className="w-3 h-3 animate-spin" />
+                  Processando...
+                </span>
+              )}
+              <KbdBadge keys="Esc" size="xs" />
+            </div>
           </div>
+
           <textarea
             ref={composeRef}
             rows={3}
@@ -244,8 +255,14 @@ export const PopupWindow: React.FC = () => {
             placeholder="Digite seu texto aqui e escolha um perfil abaixo (Ctrl+Enter ou clique)..."
             value={composeText}
             onChange={(e) => setComposeText(e.target.value)}
-            className="w-full resize-none rounded-lg bg-slate-950/70 border border-slate-700/80 px-3 py-2 text-sm text-white placeholder-slate-500 focus:outline-none focus:border-indigo-500"
+            className="w-full resize-none rounded-lg bg-[#0B0D10] border border-white/10 px-3 py-2 text-sm text-white placeholder-zinc-500 synapse-interactive focus:outline-none focus:border-sky-400/60"
           />
+
+          {isLoading && (
+            <div className="absolute inset-x-0 bottom-0 h-[2px] overflow-hidden bg-sky-500/15">
+              <div className="h-full w-1/3 bg-sky-400 synapse-loading-bar" />
+            </div>
+          )}
         </div>
       ) : (
         <PromptInput
@@ -257,15 +274,16 @@ export const PopupWindow: React.FC = () => {
       )}
 
       {errorMsg && (
-        <div
-          role="alert"
-          className="flex items-center gap-2 px-4 py-2.5 bg-red-950/90 border-b border-red-800 text-red-200 text-xs"
-        >
-          <AlertCircle className="w-4 h-4 text-red-400 shrink-0" />
-          <span className="flex-1">{errorMsg}</span>
-          <span className="text-[11px] text-red-300/80">
-            {isComposeMode ? "Ctrl+Enter p/ repetir · Esc p/ sair" : "Enter p/ repetir · Esc p/ sair"}
-          </span>
+        <div className="px-3 pt-2.5">
+          <StatusBanner
+            type="error"
+            message={errorMsg}
+            hint={
+              isComposeMode
+                ? "Ctrl+Enter p/ repetir · Esc p/ sair"
+                : "Enter p/ repetir · Esc p/ sair"
+            }
+          />
         </div>
       )}
 
@@ -277,19 +295,26 @@ export const PopupWindow: React.FC = () => {
         onHoverIndex={setSelectedIndex}
       />
 
-      <div className="flex items-center justify-between px-4 py-2 bg-slate-950/80 border-t border-slate-800/80 text-[11px] text-slate-400">
-        <span className="truncate max-w-[360px]">
+      <div className="flex items-center justify-between gap-3 px-3.5 py-2 bg-[#0B0D10]/90 border-t border-white/[0.08] text-[11px] text-zinc-400">
+        <span className="truncate max-w-[330px]">
           {isComposeMode
-            ? `Digitado: ${composeText.length} chars`
+            ? `Digitado: ${composeText.length} caracteres`
             : session
               ? `Selecionado (${session.char_count} chars): "${session.selected_text}"`
               : "Aguardando seleção..."}
         </span>
-        <span>
-          {isComposeMode
-            ? "↑↓ navegar · Ctrl+Enter/Ctrl+1..9 copiar · Esc fechar"
-            : "↑↓ navegar · Enter aplicar · Esc fechar"}
-        </span>
+
+        <div className="flex items-center gap-2.5 shrink-0 text-[10px] text-zinc-500">
+          <span className="inline-flex items-center gap-1">
+            <KbdBadge keys="↑" size="xs" />
+            <KbdBadge keys="↓" size="xs" />
+            <span>navegar</span>
+          </span>
+          <span className="inline-flex items-center gap-1">
+            <KbdBadge keys={isComposeMode ? "Ctrl+Enter" : "Enter"} size="xs" />
+            <span>{isComposeMode ? "copiar" : "aplicar"}</span>
+          </span>
+        </div>
       </div>
     </div>
   );

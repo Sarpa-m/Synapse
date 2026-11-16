@@ -1,4 +1,6 @@
 import React, { useState } from "react";
+import { Keyboard } from "lucide-react";
+import { KbdBadge } from "../../components/ui/KbdBadge";
 
 interface ShortcutRecorderProps {
   label: string;
@@ -81,10 +83,8 @@ export const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
   };
 
   return (
-    <div>
-      <label className="block text-xs font-medium text-slate-300 mb-1">
-        {label}
-      </label>
+    <div className="space-y-1.5">
+      <label className="block text-xs font-medium text-zinc-300">{label}</label>
       <div className="flex items-center gap-2">
         <button
           type="button"
@@ -98,28 +98,37 @@ export const ShortcutRecorder: React.FC<ShortcutRecorderProps> = ({
             setHint(null);
           }}
           onKeyDown={handleKeyDown}
-          className={`flex-1 text-left px-3 py-2 rounded border text-sm transition-colors ${
+          className={`flex-1 flex items-center justify-between gap-2 text-left px-3 py-2 rounded-lg border text-sm synapse-interactive focus:outline-none focus-visible:ring-2 focus-visible:ring-sky-400/50 ${
             isRecording
-              ? "bg-indigo-950/60 border-indigo-400 text-indigo-200"
-              : "bg-slate-800 border-slate-700 text-white hover:border-slate-500"
+              ? "bg-sky-950/50 border-sky-400/70 text-sky-200"
+              : "bg-[#0B0D10] border-white/10 text-zinc-100 hover:border-white/20"
           }`}
         >
-          {isRecording
-            ? "Pressione a combinação de teclas... (Esc cancela)"
-            : value || "Clique para definir um atalho"}
+          {isRecording ? (
+            <span className="inline-flex items-center gap-2 text-xs text-sky-300">
+              <span className="w-2 h-2 rounded-full bg-sky-400 animate-pulse" />
+              Pressione a combinação de teclas... (Esc cancela)
+            </span>
+          ) : value ? (
+            <KbdBadge keys={value} size="sm" />
+          ) : (
+            <span className="text-xs text-zinc-500">Clique para definir um atalho</span>
+          )}
+          <Keyboard className="w-3.5 h-3.5 text-zinc-500 shrink-0" />
         </button>
+
         <button
           type="button"
           onClick={() => {
             setIsRecording((prev) => !prev);
             setHint(null);
           }}
-          className="px-3 py-2 rounded bg-slate-800 hover:bg-slate-700 border border-slate-700 text-xs text-slate-200"
+          className="px-3 py-2 rounded-lg bg-white/[0.05] hover:bg-white/[0.09] border border-white/10 text-xs font-medium text-zinc-200 synapse-pressable"
         >
           {isRecording ? "Cancelar" : "Gravar"}
         </button>
       </div>
-      {hint && <p className="mt-1 text-xs text-amber-400">{hint}</p>}
+      {hint && <p className="text-xs text-amber-400">{hint}</p>}
     </div>
   );
 };

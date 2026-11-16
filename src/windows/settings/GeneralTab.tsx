@@ -1,12 +1,23 @@
 import React, { useState } from "react";
 import type { AppConfig, SelectionDeliveryMode } from "../../types/domain";
 import { ShortcutRecorder } from "./ShortcutRecorder";
+import { ToggleSwitch } from "../../components/ui/ToggleSwitch";
+import { StatusBanner } from "../../components/ui/StatusBanner";
 
 interface GeneralTabProps {
   config: AppConfig;
   onChange: (updated: AppConfig) => void;
   onSave: () => Promise<void> | void;
 }
+
+const DELIVERY_DESCRIPTIONS: Record<SelectionDeliveryMode, string> = {
+  clipboard:
+    "Copia o resultado para a área de transferência para você colar manualmente com Ctrl+V.",
+  paste_and_keep:
+    "Restaura o foco, cola automaticamente no app de origem e mantém a nova versão no Ctrl+V.",
+  paste_and_restore:
+    "Restaura o foco, cola automaticamente e devolve o seu clipboard anterior logo em seguida.",
+};
 
 export const GeneralTab: React.FC<GeneralTabProps> = ({
   config,
@@ -47,103 +58,130 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
   };
 
   return (
-    <div className="space-y-4">
-      <ShortcutRecorder
-        label="Atalho Global Principal (Popup Contextual)"
-        value={config.global_shortcut}
-        onChange={(global_shortcut) => onChange({ ...config, global_shortcut })}
-      />
-
-      <ShortcutRecorder
-        label="Atalho de Composição (Digitar → Perfil → Ctrl+V)"
-        value={config.compose_shortcut}
-        onChange={(compose_shortcut) =>
-          onChange({ ...config, compose_shortcut })
-        }
-      />
-
-      <ShortcutRecorder
-        label="Atalho de Undo Rápido"
-        value={config.undo_shortcut}
-        onChange={(undo_shortcut) => onChange({ ...config, undo_shortcut })}
-      />
-
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1">
-          Ao processar texto selecionado
-        </label>
-        <select
-          aria-label="Ao processar texto selecionado"
-          value={config.selection_delivery_mode}
-          onChange={(e) =>
-            onChange({
-              ...config,
-              selection_delivery_mode: e.target.value as SelectionDeliveryMode,
-            })
-          }
-          className="w-full px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-white"
-        >
-          <option value="clipboard">
-            Salvar nova versão na área de transferência (Ctrl+V)
-          </option>
-          <option value="paste_and_keep">
-            Colar automaticamente e manter nova versão no Ctrl+V
-          </option>
-          <option value="paste_and_restore">
-            Colar automaticamente e restaurar clipboard antigo
-          </option>
-        </select>
-      </div>
-
-      <div>
-        <label className="block text-xs font-medium text-slate-300 mb-1">
-          Retenção do Histórico (dias)
-        </label>
-        <input
-          type="number"
-          min={1}
-          max={365}
-          aria-label="Retenção do Histórico"
-          value={config.retention_days}
-          onChange={(e) =>
-            onChange({ ...config, retention_days: Number(e.target.value) })
-          }
-          className="w-40 px-3 py-2 rounded bg-slate-800 border border-slate-700 text-sm text-white"
-        />
-      </div>
-
-      <label className="flex items-center gap-2 text-sm text-slate-200 cursor-pointer">
-        <input
-          type="checkbox"
-          checked={config.launch_on_startup}
-          onChange={(e) =>
-            onChange({ ...config, launch_on_startup: e.target.checked })
-          }
-        />
-        Iniciar Synapse automaticamente com o Windows
-      </label>
-
-      {status && (
-        <div
-          role={status.type === "error" ? "alert" : "status"}
-          className={`px-3 py-2 rounded text-xs ${
-            status.type === "error"
-              ? "bg-red-950/60 border border-red-800 text-red-200"
-              : "bg-emerald-950/60 border border-emerald-800 text-emerald-200"
-          }`}
-        >
-          {status.text}
+    <div className="space-y-6">
+      {/* Seção 1: Atalhos Globais */}
+      <section className="rounded-xl border border-white/[0.08] bg-[#12151B] p-5 space-y-4">
+        <div>
+          <h3 className="text-sm font-semibold text-white">Atalhos Globais</h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Disparam o Synapse instantaneamente a partir de qualquer aplicativo.
+          </p>
         </div>
-      )}
 
-      <button
-        type="button"
-        disabled={isSaving}
-        onClick={handleSave}
-        className="px-4 py-2 rounded bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 text-sm font-medium text-white"
-      >
-        {isSaving ? "Salvando..." : "Salvar Configurações Gerais"}
-      </button>
+        <div className="space-y-4">
+          <ShortcutRecorder
+            label="Atalho Global Principal (Popup Contextual)"
+            value={config.global_shortcut}
+            onChange={(global_shortcut) =>
+              onChange({ ...config, global_shortcut })
+            }
+          />
+
+          <ShortcutRecorder
+            label="Atalho de Composição (Digitar → Perfil → Ctrl+V)"
+            value={config.compose_shortcut}
+            onChange={(compose_shortcut) =>
+              onChange({ ...config, compose_shortcut })
+            }
+          />
+
+          <ShortcutRecorder
+            label="Atalho de Undo Rápido"
+            value={config.undo_shortcut}
+            onChange={(undo_shortcut) =>
+              onChange({ ...config, undo_shortcut })
+            }
+          />
+        </div>
+      </section>
+
+      {/* Seção 2: Entrega e Sistema */}
+      <section className="rounded-xl border border-white/[0.08] bg-[#12151B] p-5 space-y-5">
+        <div>
+          <h3 className="text-sm font-semibold text-white">
+            Entrega e Comportamento
+          </h3>
+          <p className="text-xs text-zinc-400 mt-0.5">
+            Controle como o texto gerado retorna ao aplicativo e a retenção local.
+          </p>
+        </div>
+
+        <div className="space-y-1.5">
+          <label className="block text-xs font-medium text-zinc-300">
+            Ao processar texto selecionado
+          </label>
+          <select
+            aria-label="Ao processar texto selecionado"
+            value={config.selection_delivery_mode}
+            onChange={(e) =>
+              onChange({
+                ...config,
+                selection_delivery_mode: e.target.value as SelectionDeliveryMode,
+              })
+            }
+            className="w-full px-3 py-2 rounded-lg bg-[#0B0D10] border border-white/10 text-sm text-white synapse-interactive focus:outline-none focus:border-sky-400/60"
+          >
+            <option value="clipboard">
+              Salvar nova versão na área de transferência (Ctrl+V)
+            </option>
+            <option value="paste_and_keep">
+              Colar automaticamente e manter nova versão no Ctrl+V
+            </option>
+            <option value="paste_and_restore">
+              Colar automaticamente e restaurar clipboard antigo
+            </option>
+          </select>
+          <p className="text-xs text-zinc-400 leading-relaxed">
+            {DELIVERY_DESCRIPTIONS[config.selection_delivery_mode]}
+          </p>
+        </div>
+
+        <div className="flex items-center justify-between gap-4 pt-2 border-t border-white/[0.06]">
+          <div>
+            <label className="block text-sm font-medium text-zinc-200">
+              Retenção do Histórico (dias)
+            </label>
+            <span className="block text-xs text-zinc-400 mt-0.5">
+              Registros mais antigos são removidos automaticamente no boot.
+            </span>
+          </div>
+          <input
+            type="number"
+            min={1}
+            max={365}
+            aria-label="Retenção do Histórico"
+            value={config.retention_days}
+            onChange={(e) =>
+              onChange({ ...config, retention_days: Number(e.target.value) })
+            }
+            className="w-24 px-3 py-1.5 rounded-lg bg-[#0B0D10] border border-white/10 text-sm font-mono text-white text-center synapse-interactive focus:outline-none focus:border-sky-400/60"
+          />
+        </div>
+
+        <div className="pt-2 border-t border-white/[0.06]">
+          <ToggleSwitch
+            label="Iniciar Synapse automaticamente com o Windows"
+            description="Mantém o utilitário silencioso na bandeja do sistema após o login."
+            checked={config.launch_on_startup}
+            onChange={(launch_on_startup) =>
+              onChange({ ...config, launch_on_startup })
+            }
+          />
+        </div>
+      </section>
+
+      {status && <StatusBanner type={status.type} message={status.text} />}
+
+      <div className="flex justify-end">
+        <button
+          type="button"
+          disabled={isSaving}
+          onClick={handleSave}
+          className="px-5 py-2.5 rounded-lg bg-sky-500 hover:bg-sky-400 disabled:opacity-50 text-xs font-semibold text-slate-950 synapse-pressable"
+        >
+          {isSaving ? "Salvando..." : "Salvar Configurações Gerais"}
+        </button>
+      </div>
     </div>
   );
 };
