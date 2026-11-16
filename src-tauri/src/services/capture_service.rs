@@ -47,6 +47,14 @@ impl CaptureService {
         self
     }
 
+    /// Retorna o ponto central `(x, y)` na tela da janela em foco (ou posição do cursor).
+    ///
+    /// # Errors
+    /// Retorna erro caso o adaptador de janela do SO não consiga obter as coordenadas.
+    pub fn get_focus_screen_point(&self, hwnd: Option<isize>) -> SynapseResult<(i32, i32)> {
+        self.window_focus.get_focus_screen_point(hwnd)
+    }
+
     /// Executa o fluxo de captura com **Clipboard Guard**:
     /// 1. Captura `HWND` da janela ativa.
     /// 2. Salva backup do clipboard atual.

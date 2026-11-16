@@ -4,6 +4,13 @@ Todas as alterações notáveis, novas funcionalidades e correções de bugs de 
 
 ---
 
+## [0.2.2] - 2026-11-16
+
+### Adicionado
+- **Suporte Inteligente a Múltiplos Monitores:** Ao acionar o atalho do Popup (Seleção ou Composição), bem como ao abrir Configurações ou Atualizações, o Synapse agora identifica em qual monitor está a janela ativa em foco (`GetWindowRect` no `HWND` de origem, com fallback para a posição do cursor `GetCursorPos`) e centraliza a janela diretamente no monitor em uso, respeitando coordenadas negativas e escalas de DPI diferentes entre telas.
+
+---
+
 ## [0.2.1] - 2026-11-16
 
 ### Corrigido

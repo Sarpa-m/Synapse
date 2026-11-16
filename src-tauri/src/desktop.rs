@@ -21,6 +21,7 @@ use crate::domain::{
     profile::Profile,
     update::{UpdateCheckResult, UpdateProgress, UpdateReleaseInfo},
 };
+use crate::ports::os_ports::{center_window_on_focused_monitor, MonitorBounds};
 
 const POPUP_LABEL: &str = "popup";
 const SETTINGS_LABEL: &str = "settings";
@@ -46,10 +47,15 @@ fn hide_update_window(app: &AppHandle) {
     }
 }
 
+fn current_focus_point(app: &AppHandle) -> Option<(i32, i32)> {
+    app.try_state::<AppState>()
+        .and_then(|state| state.capture_service.get_focus_screen_point(None).ok())
+}
+
 fn show_update_window(app: &AppHandle, release: &UpdateReleaseInfo) {
     let _ = app.emit(EVENT_UPDATE_AVAILABLE, release);
     if let Some(win) = app.get_webview_window(UPDATE_LABEL) {
-        let _ = win.center();
+        center_on_focused_monitor(&win, current_focus_point(app));
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
@@ -59,16 +65,72 @@ fn show_update_window(app: &AppHandle, release: &UpdateReleaseInfo) {
 fn show_settings(app: &AppHandle) {
     let _ = app.emit(EVENT_SETTINGS_OPENED, ());
     if let Some(win) = app.get_webview_window(SETTINGS_LABEL) {
+        if !win.is_visible().unwrap_or(false) {
+            center_on_focused_monitor(&win, current_focus_point(app));
+        }
         let _ = win.show();
         let _ = win.unminimize();
         let _ = win.set_focus();
     }
 }
 
-fn show_popup_with_session(app: &AppHandle, view: &popup_cmd::PopupSessionView) {
+fn center_on_focused_monitor(win: &tauri::WebviewWindow, focus_point: Option<(i32, i32)>) {
+    let Some(pt) = focus_point else {
+        let _ = win.center();
+        return;
+    };
+
+    let Ok(raw_monitors) = win.available_monitors() else {
+        let _ = win.center();
+        return;
+    };
+
+    let monitors: Vec<MonitorBounds> = raw_monitors
+        .iter()
+        .map(|m| MonitorBounds {
+            x: m.position().x,
+            y: m.position().y,
+            width: m.size().width,
+            height: m.size().height,
+        })
+        .collect();
+
+    let win_size = win
+        .outer_size()
+        .map(|s| (s.width, s.height))
+        .unwrap_or((620, 340));
+
+    if let Some((x, y)) = center_window_on_focused_monitor(&monitors, pt, win_size) {
+        let _ = win.set_position(tauri::Position::Physical(tauri::PhysicalPosition::new(
+            x, y,
+        )));
+        // Recalcula após mover caso o monitor de destino tenha escala DPI diferente do anterior
+        if let Ok(updated_size) = win.outer_size() {
+            if (updated_size.width, updated_size.height) != win_size {
+                if let Some((nx, ny)) = center_window_on_focused_monitor(
+                    &monitors,
+                    pt,
+                    (updated_size.width, updated_size.height),
+                ) {
+                    let _ = win.set_position(tauri::Position::Physical(
+                        tauri::PhysicalPosition::new(nx, ny),
+                    ));
+                }
+            }
+        }
+    } else {
+        let _ = win.center();
+    }
+}
+
+fn show_popup_with_session(
+    app: &AppHandle,
+    view: &popup_cmd::PopupSessionView,
+    focus_point: Option<(i32, i32)>,
+) {
     if let Some(win) = app.get_webview_window(POPUP_LABEL) {
         let _ = app.emit_to(POPUP_LABEL, EVENT_SESSION_STARTED, view);
-        let _ = win.center();
+        center_on_focused_monitor(&win, focus_point);
         let _ = win.show();
         let _ = win.set_focus();
     }
@@ -85,7 +147,18 @@ fn on_main_shortcut(app: AppHandle) {
     let state = app.state::<AppState>().inner().clone();
     tauri::async_runtime::spawn(async move {
         match popup_cmd::trigger_popup_capture(&state).await {
-            Ok(view) => show_popup_with_session(&app, &view),
+            Ok(view) => {
+                let source_hwnd = state
+                    .get_active_session()
+                    .ok()
+                    .flatten()
+                    .map(|s| s.source_hwnd);
+                let focus_point = state
+                    .capture_service
+                    .get_focus_screen_point(source_hwnd)
+                    .ok();
+                show_popup_with_session(&app, &view, focus_point);
+            }
             // RN-03: seleção vazia / arquivo / imagem -> aborta silenciosamente
             Err(SynapseError::EmptySelection) => {
                 tracing::debug!("atalho acionado sem texto selecionado; abortando silenciosamente");
@@ -104,8 +177,9 @@ fn on_compose_shortcut(app: AppHandle) {
     }
 
     let state = app.state::<AppState>().inner().clone();
+    let focus_point = state.capture_service.get_focus_screen_point(None).ok();
     match popup_cmd::trigger_compose_popup(&state) {
-        Ok(view) => show_popup_with_session(&app, &view),
+        Ok(view) => show_popup_with_session(&app, &view, focus_point),
         Err(e) => tracing::warn!(error = %e, "falha ao abrir modo composição"),
     }
 }
