@@ -69,6 +69,7 @@ async function safeInvoke<T>(
 }
 
 export const SESSION_STARTED_EVENT = "synapse://session-started";
+export const SETTINGS_OPENED_EVENT = "synapse://settings-opened";
 export const UPDATE_AVAILABLE_EVENT = "synapse://update-available";
 export const UPDATE_PROGRESS_EVENT = "synapse://update-progress";
 
@@ -82,6 +83,12 @@ export const tauriClient = {
     return listen<PopupSessionView>(SESSION_STARTED_EVENT, (event) =>
       handler(event.payload)
     );
+  },
+
+  async onSettingsOpened(handler: () => void): Promise<() => void> {
+    if (!isTauriRuntime()) return () => undefined;
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen(SETTINGS_OPENED_EVENT, () => handler());
   },
   async listProfiles(): Promise<Profile[]> {
     return safeInvoke("list_profiles_cmd", undefined, () => DEFAULT_SEED_PROFILES);

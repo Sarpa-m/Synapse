@@ -7,7 +7,16 @@ use crate::domain::{
 /// Retorna a configuração para a UI garantindo que a API Key NUNCA seja exposta (RN-01).
 pub fn get_settings_cmd(state: &AppState) -> SynapseResult<AppConfigView> {
     let config = state.config_repo.get_config()?;
-    let has_api_key = state.secret_store.has_api_key()?;
+    let has_api_key = match state.secret_store.has_api_key() {
+        Ok(val) => val,
+        Err(e) => {
+            tracing::warn!(
+                error = %e,
+                "falha ao consultar cofre de credenciais do Windows; assumindo has_api_key = false"
+            );
+            false
+        }
+    };
     Ok(AppConfigView::from_config(config, has_api_key))
 }
 
@@ -17,7 +26,7 @@ pub fn save_settings_cmd(state: &AppState, config: AppConfig) -> SynapseResult<A
     state
         .history_service
         .run_retention_cleanup(config.retention_days)?;
-    let has_api_key = state.secret_store.has_api_key()?;
+    let has_api_key = state.secret_store.has_api_key().unwrap_or(false);
     Ok(AppConfigView::from_config(config, has_api_key))
 }
 

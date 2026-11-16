@@ -53,23 +53,86 @@ export const SettingsWindow: React.FC = () => {
   const [config, setConfig] = useState<AppConfigView | null>(null);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [history, setHistory] = useState<HistoryEntry[]>([]);
+  const [loadError, setLoadError] = useState<string | null>(null);
+
+  const loadSettingsData = async (retries = 6): Promise<void> => {
+    setLoadError(null);
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      try {
+        const [cfg, profs, hist] = await Promise.all([
+          tauriClient.getSettings(),
+          tauriClient.listProfiles(),
+          tauriClient.listHistory(),
+        ]);
+        setConfig(cfg);
+        setProfiles(profs);
+        setHistory(hist);
+        setLoadError(null);
+        return;
+      } catch (err: unknown) {
+        if (attempt === retries) {
+          const msg =
+            err instanceof Error
+              ? err.message
+              : typeof err === "object" && err !== null && "message" in err
+                ? String((err as { message: unknown }).message)
+                : String(err);
+          setLoadError(msg);
+          return;
+        }
+        await new Promise((resolve) => setTimeout(resolve, 250));
+      }
+    }
+  };
 
   useEffect(() => {
-    Promise.all([
-      tauriClient.getSettings(),
-      tauriClient.listProfiles(),
-      tauriClient.listHistory(),
-    ]).then(([cfg, profs, hist]) => {
-      setConfig(cfg);
-      setProfiles(profs);
-      setHistory(hist);
-    });
+    void loadSettingsData(8);
+
+    let unlisten: (() => void) | undefined;
+    tauriClient
+      .onSettingsOpened(() => {
+        void loadSettingsData(3);
+      })
+      .then((fn) => {
+        unlisten = fn;
+      });
+
+    const onFocus = () => {
+      void loadSettingsData(2);
+    };
+    window.addEventListener("focus", onFocus);
+
+    return () => {
+      if (unlisten) unlisten();
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   if (!config) {
     return (
-      <div className="min-h-screen bg-[#0B0D10] flex items-center justify-center text-sm text-zinc-400">
-        Carregando configurações...
+      <div className="min-h-screen bg-[#0B0D10] flex flex-col items-center justify-center p-6 text-center gap-3">
+        {loadError ? (
+          <>
+            <ShieldAlert className="w-7 h-7 text-red-400" />
+            <p className="text-sm font-medium text-red-200">
+              Falha ao carregar configurações
+            </p>
+            <p className="text-xs text-zinc-400 max-w-md font-mono break-all">
+              {loadError}
+            </p>
+            <button
+              type="button"
+              onClick={() => void loadSettingsData(4)}
+              className="mt-2 px-4 py-2 rounded-lg bg-sky-600 hover:bg-sky-500 text-xs font-semibold text-white"
+            >
+              Tentar novamente
+            </button>
+          </>
+        ) : (
+          <span className="text-sm text-zinc-400">
+            Carregando configurações...
+          </span>
+        )}
       </div>
     );
   }

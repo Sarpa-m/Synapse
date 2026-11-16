@@ -26,6 +26,7 @@ const POPUP_LABEL: &str = "popup";
 const SETTINGS_LABEL: &str = "settings";
 const UPDATE_LABEL: &str = "update";
 pub const EVENT_SESSION_STARTED: &str = "synapse://session-started";
+pub const EVENT_SETTINGS_OPENED: &str = "synapse://settings-opened";
 pub const EVENT_UPDATE_AVAILABLE: &str = "synapse://update-available";
 pub const EVENT_UPDATE_PROGRESS: &str = "synapse://update-progress";
 const RETENTION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
@@ -56,6 +57,7 @@ fn show_update_window(app: &AppHandle, release: &UpdateReleaseInfo) {
 }
 
 fn show_settings(app: &AppHandle) {
+    let _ = app.emit(EVENT_SETTINGS_OPENED, ());
     if let Some(win) = app.get_webview_window(SETTINGS_LABEL) {
         let _ = win.show();
         let _ = win.unminimize();
