@@ -59,6 +59,18 @@ pub enum SynapseError {
 
     #[error("falha de conexão com o provedor de IA: {0}")]
     LlmNetwork(String),
+
+    #[error("formato de versão inválido: {0}")]
+    InvalidVersionFormat(String),
+
+    #[error("falha ao verificar atualizações no GitHub: {0}")]
+    UpdateCheckFailed(String),
+
+    #[error("falha ao baixar o instalador de atualização: {0}")]
+    UpdateDownloadFailed(String),
+
+    #[error("falha ao iniciar o instalador de atualização: {0}")]
+    UpdateInstallFailed(String),
 }
 
 pub type SynapseResult<T> = Result<T, SynapseError>;

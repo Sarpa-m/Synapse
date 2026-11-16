@@ -21,6 +21,8 @@ CREATE TABLE IF NOT EXISTS app_config (
     timeout_secs INTEGER NOT NULL DEFAULT 10,
     retention_days INTEGER NOT NULL DEFAULT 30,
     selection_delivery_mode TEXT NOT NULL DEFAULT 'clipboard',
+    auto_check_updates INTEGER NOT NULL DEFAULT 1,
+    skipped_update_version TEXT,
     updated_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 

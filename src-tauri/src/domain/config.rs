@@ -46,10 +46,18 @@ pub struct AppConfig {
     pub retention_days: u32,
     #[serde(default)]
     pub selection_delivery_mode: SelectionDeliveryMode,
+    #[serde(default = "default_auto_check_updates")]
+    pub auto_check_updates: bool,
+    #[serde(default)]
+    pub skipped_update_version: Option<String>,
 }
 
 fn default_compose_shortcut() -> String {
     "Ctrl+Alt+Space".to_string()
+}
+
+const fn default_auto_check_updates() -> bool {
+    true
 }
 
 impl Default for AppConfig {
@@ -64,6 +72,8 @@ impl Default for AppConfig {
             timeout_secs: 10,
             retention_days: 30,
             selection_delivery_mode: SelectionDeliveryMode::Clipboard,
+            auto_check_updates: true,
+            skipped_update_version: None,
         }
     }
 }
@@ -98,6 +108,8 @@ pub struct AppConfigView {
     pub timeout_secs: u64,
     pub retention_days: u32,
     pub selection_delivery_mode: SelectionDeliveryMode,
+    pub auto_check_updates: bool,
+    pub skipped_update_version: Option<String>,
     pub has_api_key: bool,
 }
 
@@ -114,6 +126,8 @@ impl AppConfigView {
             timeout_secs: config.timeout_secs,
             retention_days: config.retention_days,
             selection_delivery_mode: config.selection_delivery_mode,
+            auto_check_updates: config.auto_check_updates,
+            skipped_update_version: config.skipped_update_version,
             has_api_key,
         }
     }

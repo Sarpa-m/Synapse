@@ -1,1 +1,1 @@
-{"default":{"identifier":"default","description":"Permissões mínimas das janelas popup e settings","local":true,"windows":["popup","settings"],"permissions":["core:default","core:event:default","core:window:allow-hide","core:window:allow-show","core:window:allow-set-focus"]}}
+{"default":{"identifier":"default","description":"Permissões mínimas das janelas popup, settings e update","local":true,"windows":["popup","settings","update"],"permissions":["core:default","core:event:default","core:window:allow-hide","core:window:allow-show","core:window:allow-set-focus"]}}

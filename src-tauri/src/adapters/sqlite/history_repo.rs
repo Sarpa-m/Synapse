@@ -164,7 +164,7 @@ impl ConfigRepoPort for SqliteConfigRepo {
         let conn = self.db.lock_conn()?;
         let maybe_cfg = conn
             .query_row(
-                "SELECT global_shortcut, compose_shortcut, undo_shortcut, launch_on_startup, base_url, model, timeout_secs, retention_days, selection_delivery_mode
+                "SELECT global_shortcut, compose_shortcut, undo_shortcut, launch_on_startup, base_url, model, timeout_secs, retention_days, selection_delivery_mode, auto_check_updates, skipped_update_version
                  FROM app_config
                  WHERE id = 1",
                 [],
@@ -173,6 +173,8 @@ impl ConfigRepoPort for SqliteConfigRepo {
                     let timeout_i64: i64 = row.get(6)?;
                     let retention_i64: i64 = row.get(7)?;
                     let delivery_raw: String = row.get(8)?;
+                    let auto_check_int: i64 = row.get(9)?;
+                    let skipped_update_version: Option<String> = row.get(10)?;
                     Ok(AppConfig {
                         global_shortcut: row.get(0)?,
                         compose_shortcut: row.get(1)?,
@@ -183,6 +185,8 @@ impl ConfigRepoPort for SqliteConfigRepo {
                         timeout_secs: u64::try_from(timeout_i64).unwrap_or(10),
                         retention_days: u32::try_from(retention_i64).unwrap_or(30),
                         selection_delivery_mode: SelectionDeliveryMode::from_db(&delivery_raw),
+                        auto_check_updates: auto_check_int != 0,
+                        skipped_update_version,
                     })
                 },
             )
@@ -203,8 +207,8 @@ impl ConfigRepoPort for SqliteConfigRepo {
         config.validate()?;
         let conn = self.db.lock_conn()?;
         conn.execute(
-            "INSERT INTO app_config (id, global_shortcut, compose_shortcut, undo_shortcut, launch_on_startup, base_url, model, timeout_secs, retention_days, selection_delivery_mode, updated_at)
-             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, datetime('now'))
+            "INSERT INTO app_config (id, global_shortcut, compose_shortcut, undo_shortcut, launch_on_startup, base_url, model, timeout_secs, retention_days, selection_delivery_mode, auto_check_updates, skipped_update_version, updated_at)
+             VALUES (1, ?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, datetime('now'))
              ON CONFLICT(id) DO UPDATE SET
                 global_shortcut = excluded.global_shortcut,
                 compose_shortcut = excluded.compose_shortcut,
@@ -215,6 +219,8 @@ impl ConfigRepoPort for SqliteConfigRepo {
                 timeout_secs = excluded.timeout_secs,
                 retention_days = excluded.retention_days,
                 selection_delivery_mode = excluded.selection_delivery_mode,
+                auto_check_updates = excluded.auto_check_updates,
+                skipped_update_version = excluded.skipped_update_version,
                 updated_at = datetime('now')",
             params![
                 config.global_shortcut,
@@ -226,6 +232,8 @@ impl ConfigRepoPort for SqliteConfigRepo {
                 i64::try_from(config.timeout_secs).unwrap_or(10),
                 i64::from(config.retention_days),
                 config.selection_delivery_mode.as_str(),
+                i64::from(config.auto_check_updates),
+                config.skipped_update_version,
             ],
         )
         .map_err(|e| SynapseError::DatabaseError(e.to_string()))?;

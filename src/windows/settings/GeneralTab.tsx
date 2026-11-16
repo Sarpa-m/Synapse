@@ -1,5 +1,6 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import type { AppConfig, SelectionDeliveryMode } from "../../types/domain";
+import { tauriClient } from "../../services/tauriClient";
 import { ShortcutRecorder } from "./ShortcutRecorder";
 import { ToggleSwitch } from "../../components/ui/ToggleSwitch";
 import { StatusBanner } from "../../components/ui/StatusBanner";
@@ -29,6 +30,41 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
     text: string;
   } | null>(null);
   const [isSaving, setIsSaving] = useState(false);
+  const [appVersion, setAppVersion] = useState<string>("0.1.0");
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+
+  useEffect(() => {
+    void tauriClient.getAppVersion().then(setAppVersion);
+  }, []);
+
+  const handleManualUpdateCheck = async () => {
+    setIsCheckingUpdate(true);
+    setStatus(null);
+    try {
+      const res = await tauriClient.checkForUpdates(true);
+      if (res.status === "update_available") {
+        setStatus({
+          type: "success",
+          text: `Nova versão v${res.release.version} encontrada! A janela de atualização foi aberta.`,
+        });
+      } else {
+        setStatus({
+          type: "success",
+          text: `Você já está na versão mais recente (v${res.current_version}).`,
+        });
+      }
+    } catch (err: unknown) {
+      const msg =
+        err instanceof Error
+          ? err.message
+          : typeof err === "object" && err !== null && "message" in err
+            ? String((err as { message: unknown }).message)
+            : String(err);
+      setStatus({ type: "error", text: msg });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  };
 
   const handleSave = async () => {
     if (config.global_shortcut === config.compose_shortcut) {
@@ -167,6 +203,31 @@ export const GeneralTab: React.FC<GeneralTabProps> = ({
               onChange({ ...config, launch_on_startup })
             }
           />
+        </div>
+
+        <div className="pt-3 border-t border-white/[0.06] space-y-3">
+          <ToggleSwitch
+            label="Verificar atualizações automaticamente ao iniciar"
+            description="Consulta o GitHub Releases na inicialização e solicita sua permissão antes de atualizar."
+            checked={config.auto_check_updates ?? true}
+            onChange={(auto_check_updates) =>
+              onChange({ ...config, auto_check_updates })
+            }
+          />
+
+          <div className="flex items-center justify-between gap-4 pt-1">
+            <span className="text-xs text-zinc-400 font-mono">
+              Versão instalada: v{appVersion}
+            </span>
+            <button
+              type="button"
+              disabled={isCheckingUpdate}
+              onClick={handleManualUpdateCheck}
+              className="px-3.5 py-1.5 rounded-lg bg-[#0B0D10] hover:bg-white/[0.06] border border-white/10 text-xs font-medium text-zinc-200 disabled:opacity-50 synapse-interactive"
+            >
+              {isCheckingUpdate ? "Verificando..." : "Verificar agora"}
+            </button>
+          </div>
         </div>
       </section>
 

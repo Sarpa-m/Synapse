@@ -1,8 +1,8 @@
 {
   "$schema": "../gen/schemas/desktop-schema.json",
   "identifier": "default",
-  "description": "Permissões mínimas das janelas popup e settings",
-  "windows": ["popup", "settings"],
+  "description": "Permissões mínimas das janelas popup, settings e update",
+  "windows": ["popup", "settings", "update"],
   "permissions": [
     "core:default",
     "core:event:default",

@@ -37,6 +37,20 @@
         "visible": false,
         "center": true,
         "resizable": true
+      },
+      {
+        "label": "update",
+        "url": "index.html?window=update",
+        "title": "Synapse — Atualização Disponível",
+        "width": 520,
+        "height": 460,
+        "decorations": true,
+        "transparent": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": false,
+        "visible": false,
+        "center": true,
+        "resizable": false
       }
     ],
     "security": {

@@ -2,6 +2,7 @@
 //! Registra atalho global, System Tray, janelas pré-carregadas e handlers IPC finos
 //! que apenas delegam para `crate::commands::*`.
 
+use std::sync::Arc;
 use std::time::Duration;
 
 use tauri::{
@@ -12,24 +13,45 @@ use tauri::{
 use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::adapters::sqlite::db::SqliteDatabase;
-use crate::commands::{history_cmd, popup_cmd, profile_cmd, settings_cmd, AppState};
+use crate::commands::{history_cmd, popup_cmd, profile_cmd, settings_cmd, update_cmd, AppState};
 use crate::domain::{
     config::{AppConfig, AppConfigView},
     errors::{SynapseError, SynapseResult},
     history::HistoryEntry,
     profile::Profile,
+    update::{UpdateCheckResult, UpdateProgress, UpdateReleaseInfo},
 };
 
 const POPUP_LABEL: &str = "popup";
 const SETTINGS_LABEL: &str = "settings";
+const UPDATE_LABEL: &str = "update";
 pub const EVENT_SESSION_STARTED: &str = "synapse://session-started";
+pub const EVENT_UPDATE_AVAILABLE: &str = "synapse://update-available";
+pub const EVENT_UPDATE_PROGRESS: &str = "synapse://update-progress";
 const RETENTION_INTERVAL: Duration = Duration::from_secs(24 * 60 * 60);
+const STARTUP_UPDATE_CHECK_DELAY: Duration = Duration::from_secs(3);
 
 fn hide_popup(app: &AppHandle) {
     if let Some(win) = app.get_webview_window(POPUP_LABEL) {
         if let Err(e) = win.hide() {
             tracing::warn!(error = %e, "falha ao esconder popup");
         }
+    }
+}
+
+fn hide_update_window(app: &AppHandle) {
+    if let Some(win) = app.get_webview_window(UPDATE_LABEL) {
+        let _ = win.hide();
+    }
+}
+
+fn show_update_window(app: &AppHandle, release: &UpdateReleaseInfo) {
+    let _ = app.emit(EVENT_UPDATE_AVAILABLE, release);
+    if let Some(win) = app.get_webview_window(UPDATE_LABEL) {
+        let _ = win.center();
+        let _ = win.show();
+        let _ = win.unminimize();
+        let _ = win.set_focus();
     }
 }
 
@@ -209,6 +231,66 @@ fn clear_history_cmd(state: State<'_, AppState>) -> SynapseResult<()> {
     history_cmd::clear_history_cmd(&state)
 }
 
+#[tauri::command]
+fn get_app_version_cmd(state: State<'_, AppState>) -> String {
+    update_cmd::get_app_version_cmd(&state)
+}
+
+#[tauri::command]
+fn get_pending_update_cmd(state: State<'_, AppState>) -> SynapseResult<Option<UpdateReleaseInfo>> {
+    update_cmd::get_pending_update_cmd(&state)
+}
+
+#[tauri::command]
+async fn check_for_updates_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    manual: bool,
+) -> SynapseResult<UpdateCheckResult> {
+    let result = update_cmd::check_for_updates_cmd(&state, manual).await?;
+    if let UpdateCheckResult::UpdateAvailable { ref release, .. } = result {
+        show_update_window(&app, release);
+    }
+    Ok(result)
+}
+
+#[tauri::command]
+async fn install_update_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    release: UpdateReleaseInfo,
+) -> SynapseResult<()> {
+    let app_for_progress = app.clone();
+    let on_progress = Arc::new(move |progress: UpdateProgress| {
+        let _ = app_for_progress.emit(EVENT_UPDATE_PROGRESS, &progress);
+    });
+
+    update_cmd::install_update_cmd(&state, release, on_progress).await?;
+
+    let app_for_exit = app.clone();
+    tauri::async_runtime::spawn(async move {
+        tokio::time::sleep(Duration::from_millis(400)).await;
+        app_for_exit.exit(0);
+    });
+    Ok(())
+}
+
+#[tauri::command]
+fn skip_update_version_cmd(
+    app: AppHandle,
+    state: State<'_, AppState>,
+    version: String,
+) -> SynapseResult<()> {
+    hide_update_window(&app);
+    update_cmd::skip_update_version_cmd(&state, &version)
+}
+
+#[tauri::command]
+fn dismiss_update_prompt_cmd(app: AppHandle, state: State<'_, AppState>) -> SynapseResult<()> {
+    hide_update_window(&app);
+    update_cmd::dismiss_update_prompt_cmd(&state)
+}
+
 // ---------------------------------------------------------------------------
 // Bootstrap
 // ---------------------------------------------------------------------------
@@ -241,14 +323,37 @@ fn register_shortcut(
 
 fn build_tray(app: &AppHandle) -> tauri::Result<()> {
     let settings = MenuItem::with_id(app, "settings", "Configurações", true, None::<&str>)?;
+    let check_updates = MenuItem::with_id(
+        app,
+        "check_updates",
+        "Verificar atualizações...",
+        true,
+        None::<&str>,
+    )?;
     let quit = MenuItem::with_id(app, "quit", "Sair do Synapse", true, None::<&str>)?;
-    let menu = Menu::with_items(app, &[&settings, &quit])?;
+    let menu = Menu::with_items(app, &[&settings, &check_updates, &quit])?;
 
     let mut builder = TrayIconBuilder::with_id("synapse-tray")
         .tooltip("Synapse Desktop")
         .menu(&menu)
         .on_menu_event(|app, event| match event.id.as_ref() {
             "settings" => show_settings(app),
+            "check_updates" => {
+                let app_handle = app.clone();
+                let state = app.state::<AppState>().inner().clone();
+                tauri::async_runtime::spawn(async move {
+                    match update_cmd::check_for_updates_cmd(&state, true).await {
+                        Ok(UpdateCheckResult::UpdateAvailable { release, .. }) => {
+                            show_update_window(&app_handle, &release);
+                        }
+                        Ok(_) => show_settings(&app_handle),
+                        Err(e) => {
+                            tracing::warn!(error = %e, "falha ao verificar atualizações pelo tray");
+                            show_settings(&app_handle);
+                        }
+                    }
+                });
+            }
             "quit" => app.exit(0),
             _ => {}
         });
@@ -286,13 +391,44 @@ fn setup(app: &mut tauri::App) -> Result<(), Box<dyn std::error::Error>> {
     }
     build_tray(&handle)?;
 
-    // Fechar a janela de configurações apenas a esconde (o app vive no tray)
-    if let Some(settings) = handle.get_webview_window(SETTINGS_LABEL) {
-        let win = settings.clone();
-        settings.on_window_event(move |event| {
-            if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                api.prevent_close();
-                let _ = win.hide();
+    // Fechar as janelas de configurações e atualização apenas as esconde (o app vive no tray)
+    for label in [SETTINGS_LABEL, UPDATE_LABEL] {
+        if let Some(window) = handle.get_webview_window(label) {
+            let win = window.clone();
+            window.on_window_event(move |event| {
+                if let tauri::WindowEvent::CloseRequested { api, .. } = event {
+                    api.prevent_close();
+                    let _ = win.hide();
+                }
+            });
+        }
+    }
+
+    // Verificação automática de atualização no boot (assíncrona e silenciosa em caso de erro)
+    if config.auto_check_updates {
+        let update_handle = handle.clone();
+        let update_state = state.clone();
+        tauri::async_runtime::spawn(async move {
+            tokio::time::sleep(STARTUP_UPDATE_CHECK_DELAY).await;
+            match update_cmd::check_for_updates_cmd(&update_state, false).await {
+                Ok(UpdateCheckResult::UpdateAvailable { release, .. }) => {
+                    tracing::info!(
+                        new_version = %release.version,
+                        "nova versão encontrada no GitHub; solicitando permissão ao usuário"
+                    );
+                    show_update_window(&update_handle, &release);
+                }
+                Ok(UpdateCheckResult::UpToDate { current_version }) => {
+                    tracing::debug!(version = %current_version, "Synapse está na versão mais recente");
+                }
+                Ok(UpdateCheckResult::Skipped {
+                    skipped_version, ..
+                }) => {
+                    tracing::debug!(skipped = %skipped_version, "atualização disponível foi ignorada pelo usuário");
+                }
+                Err(e) => {
+                    tracing::warn!(error = %e, "não foi possível verificar atualizações na inicialização");
+                }
             }
         });
     }
@@ -339,6 +475,12 @@ pub fn run() {
             clear_api_key_cmd,
             list_history_cmd,
             clear_history_cmd,
+            get_app_version_cmd,
+            get_pending_update_cmd,
+            check_for_updates_cmd,
+            install_update_cmd,
+            skip_update_version_cmd,
+            dismiss_update_prompt_cmd,
         ])
         .run(tauri::generate_context!());
 

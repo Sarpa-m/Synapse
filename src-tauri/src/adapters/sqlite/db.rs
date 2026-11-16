@@ -57,6 +57,8 @@ impl SqliteDatabase {
 
         let mut has_compose_col = false;
         let mut has_delivery_col = false;
+        let mut has_auto_check_col = false;
+        let mut has_skipped_version_col = false;
         conn.prepare("PRAGMA table_info(app_config)")
             .and_then(|mut stmt| {
                 let rows = stmt.query_map([], |row| row.get::<_, String>(1))?;
@@ -64,6 +66,8 @@ impl SqliteDatabase {
                     match col?.as_str() {
                         "compose_shortcut" => has_compose_col = true,
                         "selection_delivery_mode" => has_delivery_col = true,
+                        "auto_check_updates" => has_auto_check_col = true,
+                        "skipped_update_version" => has_skipped_version_col = true,
                         _ => {}
                     }
                 }
@@ -88,6 +92,26 @@ impl SqliteDatabase {
             .map_err(|e| {
                 SynapseError::DatabaseError(format!(
                     "falha ao adicionar selection_delivery_mode: {e}"
+                ))
+            })?;
+        }
+        if !has_auto_check_col {
+            conn.execute(
+                "ALTER TABLE app_config ADD COLUMN auto_check_updates INTEGER NOT NULL DEFAULT 1",
+                [],
+            )
+            .map_err(|e| {
+                SynapseError::DatabaseError(format!("falha ao adicionar auto_check_updates: {e}"))
+            })?;
+        }
+        if !has_skipped_version_col {
+            conn.execute(
+                "ALTER TABLE app_config ADD COLUMN skipped_update_version TEXT",
+                [],
+            )
+            .map_err(|e| {
+                SynapseError::DatabaseError(format!(
+                    "falha ao adicionar skipped_update_version: {e}"
                 ))
             })?;
         }

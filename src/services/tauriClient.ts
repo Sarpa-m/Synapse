@@ -4,6 +4,9 @@ import type {
   HistoryEntry,
   PopupSessionView,
   Profile,
+  UpdateCheckResult,
+  UpdateProgress,
+  UpdateReleaseInfo,
 } from "../types/domain";
 
 const DEFAULT_SEED_PROFILES: Profile[] = [
@@ -66,6 +69,8 @@ async function safeInvoke<T>(
 }
 
 export const SESSION_STARTED_EVENT = "synapse://session-started";
+export const UPDATE_AVAILABLE_EVENT = "synapse://update-available";
+export const UPDATE_PROGRESS_EVENT = "synapse://update-progress";
 
 export const tauriClient = {
   /** Assina o evento emitido pelo backend quando o atalho global captura um novo texto. */
@@ -148,6 +153,8 @@ export const tauriClient = {
       timeout_secs: 10,
       retention_days: 30,
       selection_delivery_mode: "clipboard",
+      auto_check_updates: true,
+      skipped_update_version: null,
       has_api_key: true,
     }));
   },
@@ -179,5 +186,52 @@ export const tauriClient = {
 
   async clearHistory(): Promise<void> {
     return safeInvoke("clear_history_cmd", undefined, () => undefined);
+  },
+
+  async getAppVersion(): Promise<string> {
+    return safeInvoke("get_app_version_cmd", undefined, () => "0.1.0");
+  },
+
+  async getPendingUpdate(): Promise<UpdateReleaseInfo | null> {
+    return safeInvoke("get_pending_update_cmd", undefined, () => null);
+  },
+
+  async checkForUpdates(manual = false): Promise<UpdateCheckResult> {
+    return safeInvoke("check_for_updates_cmd", { manual }, () => ({
+      status: "up_to_date" as const,
+      current_version: "0.1.0",
+    }));
+  },
+
+  async installUpdate(release: UpdateReleaseInfo): Promise<void> {
+    return safeInvoke("install_update_cmd", { release }, () => undefined);
+  },
+
+  async skipUpdateVersion(version: string): Promise<void> {
+    return safeInvoke("skip_update_version_cmd", { version }, () => undefined);
+  },
+
+  async dismissUpdatePrompt(): Promise<void> {
+    return safeInvoke("dismiss_update_prompt_cmd", undefined, () => undefined);
+  },
+
+  async onUpdateAvailable(
+    handler: (release: UpdateReleaseInfo) => void
+  ): Promise<() => void> {
+    if (!isTauriRuntime()) return () => undefined;
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<UpdateReleaseInfo>(UPDATE_AVAILABLE_EVENT, (event) =>
+      handler(event.payload)
+    );
+  },
+
+  async onUpdateProgress(
+    handler: (progress: UpdateProgress) => void
+  ): Promise<() => void> {
+    if (!isTauriRuntime()) return () => undefined;
+    const { listen } = await import("@tauri-apps/api/event");
+    return listen<UpdateProgress>(UPDATE_PROGRESS_EVENT, (event) =>
+      handler(event.payload)
+    );
   },
 };

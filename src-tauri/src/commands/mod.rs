@@ -8,28 +8,35 @@ use crate::adapters::{
         history_repo::{SqliteConfigRepo, SqliteHistoryRepo},
         profile_repo::SqliteProfileRepo,
     },
+    updater::{github_releases::GitHubReleasesAdapter, windows_installer::WindowsInstallerAdapter},
     windows_os::{
         clipboard::SystemClipboardAdapter, keyboard::WindowsKeyboardAdapter,
         window_focus::WindowsWindowFocusAdapter,
     },
 };
-use crate::domain::errors::{SynapseError, SynapseResult};
+use crate::domain::{
+    errors::{SynapseError, SynapseResult},
+    update::UpdateReleaseInfo,
+};
 use crate::ports::{
     llm_port::LlmProviderPort,
     os_ports::{ClipboardPort, KeyboardSimulatorPort, WindowFocusPort},
     storage_ports::{ConfigRepoPort, HistoryRepoPort, ProfileRepoPort, SecretStorePort},
+    update_port::{ReleaseProviderPort, UpdateInstallerPort},
 };
 use crate::services::{
     capture_service::{CaptureService, CaptureSession},
     execution_service::ExecutionService,
     history_service::HistoryService,
     profile_service::ProfileService,
+    update_service::UpdateService,
 };
 
 pub mod history_cmd;
 pub mod popup_cmd;
 pub mod profile_cmd;
 pub mod settings_cmd;
+pub mod update_cmd;
 
 /// Estado compartilhado da aplicação gerenciado pelo Tauri (`AppState`).
 #[derive(Clone)]
@@ -38,9 +45,11 @@ pub struct AppState {
     pub history_service: HistoryService,
     pub capture_service: CaptureService,
     pub execution_service: ExecutionService,
+    pub update_service: UpdateService,
     pub config_repo: Arc<dyn ConfigRepoPort>,
     pub secret_store: Arc<dyn SecretStorePort>,
     active_session: Arc<Mutex<Option<CaptureSession>>>,
+    pending_update: Arc<Mutex<Option<UpdateReleaseInfo>>>,
 }
 
 impl AppState {
@@ -81,14 +90,23 @@ impl AppState {
             Arc::clone(&secret_store),
         );
 
+        let release_provider: Arc<dyn ReleaseProviderPort> =
+            Arc::new(GitHubReleasesAdapter::new()?);
+        let update_installer: Arc<dyn UpdateInstallerPort> =
+            Arc::new(WindowsInstallerAdapter::new());
+        let update_service =
+            UpdateService::new(release_provider, update_installer, Arc::clone(&config_repo));
+
         Ok(Self {
             profile_service,
             history_service,
             capture_service,
             execution_service,
+            update_service,
             config_repo,
             secret_store,
             active_session: Arc::new(Mutex::new(None)),
+            pending_update: Arc::new(Mutex::new(None)),
         })
     }
 
@@ -106,6 +124,21 @@ impl AppState {
             .active_session
             .lock()
             .map_err(|_| SynapseError::DatabaseError("lock de sessão ativa corrompido".into()))?;
+        Ok(guard.clone())
+    }
+
+    pub fn set_pending_update(&self, release: Option<UpdateReleaseInfo>) -> SynapseResult<()> {
+        let mut guard = self.pending_update.lock().map_err(|_| {
+            SynapseError::DatabaseError("lock de atualização pendente corrompido".into())
+        })?;
+        *guard = release;
+        Ok(())
+    }
+
+    pub fn get_pending_update(&self) -> SynapseResult<Option<UpdateReleaseInfo>> {
+        let guard = self.pending_update.lock().map_err(|_| {
+            SynapseError::DatabaseError("lock de atualização pendente corrompido".into())
+        })?;
         Ok(guard.clone())
     }
 }

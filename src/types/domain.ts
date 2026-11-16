@@ -30,10 +30,44 @@ export interface AppConfig {
   timeout_secs: number;
   retention_days: number;
   selection_delivery_mode: SelectionDeliveryMode;
+  auto_check_updates?: boolean;
+  skipped_update_version?: string | null;
 }
 
 export interface AppConfigView extends AppConfig {
   has_api_key: boolean;
+}
+
+export interface UpdateReleaseInfo {
+  version: string;
+  tag_name: string;
+  release_notes: string;
+  published_at: string;
+  download_url: string;
+  asset_name: string;
+  asset_size_bytes: number;
+}
+
+export type UpdateCheckResult =
+  | {
+      status: "up_to_date";
+      current_version: string;
+    }
+  | {
+      status: "update_available";
+      current_version: string;
+      release: UpdateReleaseInfo;
+    }
+  | {
+      status: "skipped";
+      current_version: string;
+      skipped_version: string;
+    };
+
+export interface UpdateProgress {
+  downloaded_bytes: number;
+  total_bytes: number;
+  percentage: number;
 }
 
 export type PopupMode = "selection" | "compose";
