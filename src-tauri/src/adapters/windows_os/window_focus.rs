@@ -65,4 +65,51 @@ impl WindowFocusPort for WindowsWindowFocusAdapter {
             Ok(())
         }
     }
+
+    fn get_focus_screen_point(&self, hwnd: Option<isize>) -> SynapseResult<(i32, i32)> {
+        #[cfg(target_os = "windows")]
+        {
+            use std::ffi::c_void;
+            use windows::Win32::Foundation::{HWND, POINT, RECT};
+            use windows::Win32::UI::WindowsAndMessaging::{
+                GetCursorPos, GetForegroundWindow, GetWindowRect,
+            };
+
+            let target_hwnd = match hwnd.filter(|&h| h != 0) {
+                Some(raw) => HWND(raw as *mut c_void),
+                None => unsafe { GetForegroundWindow() },
+            };
+
+            if !target_hwnd.0.is_null() {
+                let mut rect = RECT::default();
+                // SAFETY: `GetWindowRect` preenche `RECT` com as coordenadas físicas na tela virtual.
+                if unsafe { GetWindowRect(target_hwnd, &mut rect) }.is_ok()
+                    && rect.right > rect.left
+                    && rect.bottom > rect.top
+                {
+                    let center_x = rect.left.saturating_add(rect.right - rect.left) / 2;
+                    let _ = center_x;
+                    let cx = rect.left + (rect.right - rect.left) / 2;
+                    let cy = rect.top + (rect.bottom - rect.top) / 2;
+                    return Ok((cx, cy));
+                }
+            }
+
+            let mut pt = POINT::default();
+            // SAFETY: `GetCursorPos` lê a posição física atual do ponteiro do mouse.
+            if unsafe { GetCursorPos(&mut pt) }.is_ok() {
+                return Ok((pt.x, pt.y));
+            }
+
+            Err(SynapseError::WindowFocusError(
+                "não foi possível determinar a posição da janela ativa ou do cursor".into(),
+            ))
+        }
+
+        #[cfg(not(target_os = "windows"))]
+        {
+            let _ = hwnd;
+            Ok((0, 0))
+        }
+    }
 }
